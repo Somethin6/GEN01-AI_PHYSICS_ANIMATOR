@@ -1,0 +1,7 @@
+{
+  "Axes": ["x_range", "y_range", "x_length", "y_length", "axis_config", "x_axis_config", "y_axis_config", "tips"],
+  "NumberPlane": ["x_range", "y_range", "x_length", "y_length", "background_line_style"],
+  "NumberLine": ["x_range", "length", "include_numbers", "numbers_to_include", "tip_width", "tip_height"],
+  "Text": ["text", "font_size", "color"],
+  "MathTex": ["tex_strings", "font_size", "tex_environment", "tex_to_color_map"]
+}

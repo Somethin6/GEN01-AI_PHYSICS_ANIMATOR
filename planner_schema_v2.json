@@ -1,0 +1,253 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Planner Schema v2",
+  "type": "object",
+  "required": ["topic", "target_duration_s", "global_style", "trackers", "beats", "transitions"],
+  "properties": {
+    "topic": {
+      "type": "string",
+      "description": "The educational topic being visualized"
+    },
+    "target_duration_s": {
+      "type": "number",
+      "minimum": 10,
+      "maximum": 300,
+      "description": "Total video duration in seconds"
+    },
+    "global_style": {
+      "type": "object",
+      "required": ["resolution", "fps", "bg_color", "palette", "latex_ok"],
+      "properties": {
+        "resolution": {
+          "type": "string",
+          "enum": ["1920x1080", "1280x720", "3840x2160"],
+          "description": "Video resolution"
+        },
+        "fps": {
+          "type": "integer",
+          "enum": [30, 60],
+          "description": "Frames per second"
+        },
+        "bg_color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Background color in hex format"
+        },
+        "palette": {
+          "type": "object",
+          "required": ["primary_text", "secondary_text", "grid", "vars"],
+          "properties": {
+            "primary_text": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "secondary_text": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "grid": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "vars": {
+              "type": "object",
+              "patternProperties": {
+                "^[A-Za-z]$": {
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                }
+              },
+              "description": "Color assignments for mathematical variables"
+            }
+          }
+        },
+        "latex_ok": {
+          "type": "boolean",
+          "description": "Whether LaTeX rendering is available and healthy"
+        }
+      }
+    },
+    "trackers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "value"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+            "description": "Valid Python identifier for ValueTracker"
+          },
+          "value": {
+            "type": "number",
+            "description": "Initial value for the tracker"
+          }
+        }
+      }
+    },
+    "beats": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "t_start", "duration_s", "intent", "question", "shots", "misconception_counter"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          },
+          "t_start": {
+            "type": "number",
+            "minimum": 0
+          },
+          "duration_s": {
+            "type": "number",
+            "minimum": 0.5
+          },
+          "intent": {
+            "type": "string",
+            "description": "Educational purpose of this beat"
+          },
+          "question": {
+            "type": "string",
+            "description": "Curiosity gap question posed to viewer"
+          },
+          "shots": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "t_start", "duration_s", "visuals", "layout", "animation"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$"
+                },
+                "t_start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "duration_s": {
+                  "type": "number",
+                  "minimum": 0.1
+                },
+                "visuals": {
+                  "type": "object",
+                  "required": ["type"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["text", "axes_pair", "vector_field", "equation", "graph", "diagram"]
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "layout": {
+                  "type": "object",
+                  "required": ["region", "collision_zones"],
+                  "properties": {
+                    "region": {
+                      "type": "string",
+                      "enum": ["top_left", "top_center", "top_right", "center_left", "center", "center_right", "bottom_left", "bottom_center", "bottom_right"]
+                    },
+                    "collision_zones": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "minItems": 4,
+                        "maxItems": 4,
+                        "description": "[x0, y0, x1, y1] normalized screen coordinates"
+                      }
+                    }
+                  }
+                },
+                "contrast_check": {
+                  "type": "boolean",
+                  "description": "Whether this shot meets WCAG 4.5:1 contrast"
+                },
+                "animation": {
+                  "type": "object",
+                  "properties": {
+                    "in": {
+                      "type": "string",
+                      "enum": ["Write", "FadeIn", "Create", "DrawBorderThenFill"]
+                    },
+                    "play": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["tracker", "to", "run_time"],
+                        "properties": {
+                          "tracker": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "number"
+                          },
+                          "run_time": {
+                            "type": "number",
+                            "minimum": 0.1
+                          },
+                          "rate_func": {
+                            "type": "string",
+                            "enum": ["linear", "smooth", "rush_into", "rush_from", "there_and_back"]
+                          }
+                        }
+                      }
+                    },
+                    "out": {
+                      "type": ["string", "null"],
+                      "enum": ["FadeOut", "Unwrite", null]
+                    }
+                  }
+                },
+                "reading_time_s": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Minimum time for text reading at 180 wpm"
+                },
+                "transition_to_next": {
+                  "type": "string",
+                  "description": "Specific transition description to next shot"
+                }
+              }
+            }
+          },
+          "misconception_counter": {
+            "type": "string",
+            "description": "How this beat addresses common misconceptions"
+          }
+        }
+      }
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from_shot", "to_shot", "type", "duration_s"],
+        "properties": {
+          "from_shot": {
+            "type": "string"
+          },
+          "to_shot": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["CrossFade", "ReplacementTransform", "FadeIn", "FadeOut"]
+          },
+          "duration_s": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 2.0
+          }
+        }
+      }
+    }
+  }
+}

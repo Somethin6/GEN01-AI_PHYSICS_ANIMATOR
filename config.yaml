@@ -1,0 +1,37 @@
+llm:
+  host: "http://127.0.0.1:11434"
+  model: "qwen2.5:14b-instruct-q4_K_M"
+  temperature: 0.2
+  top_p: 0.9
+  max_tokens: 2048
+  stop: []
+
+agent:
+  max_rounds: 6
+  accept_on_low_quality: false
+  use_enhanced_pipeline: true
+
+planning:
+  target_duration_s: 15
+  schema_version: "v2"
+  enforce_collision_zones: true
+  min_contrast_ratio: 4.5  # WCAG 2.1 threshold
+
+manim:
+  first_pass_quality: "low"
+  final_quality: "high"
+  fps: 60
+  scene_class: "MainScene"
+  output_dir: "out"
+  use_temp_scene_path: true
+
+latex:
+  require_healthy: false
+
+ffmpeg:
+  enable: true
+  crf: 18
+  preset: "medium"
+  pix_fmt: "yuv420p"
+  movflags_faststart: true
+  scale_width: 1920
