@@ -1,0 +1,25 @@
+# Models Directory
+
+This directory contains GGUF model files for the AI Physics Animator.
+
+## Recommended Models
+
+For optimal performance on RTX 2080 Ti (11GB VRAM):
+
+1. **Qwen2.5-Coder-14B-Instruct (Q4_K_M)** - Primary coding model
+   - Download: `wget https://huggingface.co/bartowski/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf`
+   - Size: ~8.5GB (fits with 2GB headroom)
+
+2. **Qwen2.5-Coder-1.5B-Instruct (Q8_0)** - Draft model for speculative decoding
+   - Download: `wget https://huggingface.co/bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-1.5B-Instruct-Q8_0.gguf`
+   - Size: ~1.6GB
+
+## Usage
+
+Update `orchestrator/config.toml` to point to your downloaded model:
+
+```toml
+[llm]
+model_path = "models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf"
+draft_model_path = "models/Qwen2.5-Coder-1.5B-Instruct-Q8_0.gguf"  # Optional for speculative decoding
+```

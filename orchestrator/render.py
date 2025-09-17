@@ -225,10 +225,24 @@ class VideoComposer:
             "-i", str(input_file),
             "-c:v", self.config["output_codec"],
             "-preset", self.config["preset"],
+            "-tune", "hq",  # High quality tune for NVENC
             "-crf", str(self.config["crf"]),
             "-pix_fmt", self.config["pixel_format"],
+            "-bf", "3",  # B-frames for better compression
+            "-b_ref_mode", "middle",  # Reference frame mode
+            "-spatial_aq", "1",  # Spatial adaptive quantization
+            "-temporal_aq", "1",  # Temporal adaptive quantization
+            "-rc_lookahead", "20",  # Rate control lookahead
             "-y"
         ]
+        
+        # Add audio normalization if enabled
+        if self.config.get("audio_normalize", True):
+            cmd.extend([
+                "-af", f"loudnorm=I={self.config.get('loudnorm_i', -16)}:"
+                       f"TP={self.config.get('loudnorm_tp', -1.5)}:"
+                       f"LRA={self.config.get('loudnorm_lra', 11)}"
+            ])
         
         # Add faststart if configured
         if self.config.get("enable_faststart", True):
@@ -237,7 +251,8 @@ class VideoComposer:
         cmd.append(str(output_file))
         
         try:
-            print(f"NVENC encoding to {output_file}...")
+            print(f"NVENC encoding with loudness normalization to {output_file}...")
+            print(f"NVENC preset: {self.config['preset']}, CRF: {self.config['crf']}")
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -259,6 +274,99 @@ class VideoComposer:
         except Exception as e:
             print(f"Error during NVENC encoding: {e}")
             return False
+    
+    def compose_with_transitions(self, beat_files: List[Path], output_name: str = "final_video", 
+                               transition_duration: float = 0.5) -> Optional[Path]:
+        """Compose videos with crossfade transitions and loudness normalization"""
+        
+        if not beat_files:
+            print("No beat files to compose")
+            return None
+        
+        if len(beat_files) == 1:
+            # Single file, just copy with normalization
+            output_file = self.output_dir / f"{output_name}.mp4"
+            return self._nvenc_encode(beat_files[0], output_file) and output_file or None
+        
+        # Build complex filter for crossfades
+        output_file = self.output_dir / f"{output_name}_transitions.mp4"
+        
+        # Create input list
+        inputs = []
+        for beat_file in beat_files:
+            inputs.extend(["-i", str(beat_file)])
+        
+        # Build filter complex for crossfades
+        filter_parts = []
+        video_parts = []
+        audio_parts = []
+        
+        for i in range(len(beat_files)):
+            if i == 0:
+                # First video - no transition in
+                video_parts.append(f"[{i}:v]")
+                audio_parts.append(f"[{i}:a]")
+            else:
+                # Add crossfade transition
+                prev_video = video_parts[-1] if video_parts else f"[{i-1}:v]"
+                curr_video = f"[{i}:v]"
+                
+                xfade_output = f"[v{i}]"
+                filter_parts.append(f"{prev_video}{curr_video}xfade=transition=fade:duration={transition_duration}:offset=...{xfade_output}")
+                video_parts = [xfade_output]
+                
+                # Audio crossfade
+                prev_audio = audio_parts[-1] if audio_parts else f"[{i-1}:a]"
+                curr_audio = f"[{i}:a]"
+                acrossfade_output = f"[a{i}]"
+                filter_parts.append(f"{prev_audio}{curr_audio}acrossfade=d={transition_duration}{acrossfade_output}")
+                audio_parts = [acrossfade_output]
+        
+        # Combine filter parts
+        filter_complex = ";".join(filter_parts)
+        final_video = video_parts[0] if video_parts else "[0:v]"
+        final_audio = audio_parts[0] if audio_parts else "[0:a]"
+        
+        cmd = [
+            "ffmpeg"
+        ] + inputs + [
+            "-filter_complex", filter_complex,
+            "-map", final_video,
+            "-map", final_audio,
+            "-c:v", self.config["output_codec"],
+            "-preset", self.config["preset"],
+            "-tune", "hq",
+            "-crf", str(self.config["crf"]),
+            "-af", f"loudnorm=I={self.config.get('loudnorm_i', -16)}:"
+                   f"TP={self.config.get('loudnorm_tp', -1.5)}:"
+                   f"LRA={self.config.get('loudnorm_lra', 11)}",
+            "-y",
+            str(output_file)
+        ]
+        
+        try:
+            print(f"Creating video with transitions...")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=900  # 15 minute timeout for complex operations
+            )
+            
+            if result.returncode != 0:
+                print(f"Transition composition error:")
+                print(result.stderr)
+                return None
+            
+            print(f"Transition composition successful: {output_file}")
+            return output_file
+            
+        except subprocess.TimeoutExpired:
+            print("Timeout during transition composition")
+            return None
+        except Exception as e:
+            print(f"Error during transition composition: {e}")
+            return None
     
     def validate_streams(self, beat_files: List[Path]) -> bool:
         """Validate that all beat files have compatible streams for concat"""
