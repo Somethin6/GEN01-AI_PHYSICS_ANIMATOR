@@ -9,7 +9,7 @@ offload_kqv = true
 flash_attn = true
 type_k = "Q8_0"  # KV cache quantization
 type_v = "Q8_0"
-chat_format = null  # will read from GGUF
+chat_format = "auto"  # will read from GGUF
 verbose = false
 
 [performance]

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "text_creation",
+    "snippet": "Text('Hello World')",
+    "category": "text",
+    "notes": "Create text object"
+  },
+  {
+    "id": "mathtex",
+    "snippet": "MathTex(r'\\\\vec{F} = m\\\\vec{a}')",
+    "category": "math",
+    "notes": "Create mathematical expression"
+  },
+  {
+    "id": "write_animation",
+    "snippet": "self.play(Write(object))",
+    "category": "animation",
+    "notes": "Write animation"
+  }
+]
