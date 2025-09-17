@@ -1,0 +1,51 @@
+# AI Physics Animator Configuration
+[llm]
+model_path = "models/Qwen3-14B-Instruct-Q5_K_M.gguf"
+n_gpu_layers = -1  # offload all layers that fit
+n_ctx = 4096
+n_batch = 1024
+n_ubatch = 512
+offload_kqv = true
+flash_attn = true
+type_k = "Q8_0"  # KV cache quantization
+type_v = "Q8_0"
+chat_format = null  # will read from GGUF
+verbose = false
+
+[performance]
+target_tokens_per_second = 30
+vram_headroom_gb = 1.0
+benchmark_tokens = 512
+
+[manim]
+quality_fast = "low"
+quality_final = "high"
+fps = 60
+resolution = [1920, 1080]
+scene_class = "MainScene"
+
+[rag]
+embedding_model = "all-MiniLM-L6-v2"
+chunk_size = 512
+chunk_overlap = 50
+top_k = 5
+min_similarity = 0.7
+
+[critic]
+overlap_threshold = 0.2
+contrast_ratio_min = 4.5  # WCAG 2.1
+contrast_ratio_large_text = 3.0
+sample_points = [0.0, 0.5, 1.0]
+
+[ffmpeg]
+concat_method = "demuxer"
+output_codec = "h264_nvenc"
+preset = "p5"
+crf = 18
+pixel_format = "yuv420p"
+enable_faststart = true
+
+[orchestrator]
+max_retries = 3
+checkpoint_interval = 1
+state_file = "orchestrator_state.json"
