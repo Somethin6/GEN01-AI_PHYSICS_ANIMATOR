@@ -4,7 +4,11 @@ Each schema has a corresponding Doctor for validation.
 """
 
 from typing import List, Dict, Any, Optional, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
+try:
+    from pydantic import validator  # Pydantic v1 style
+except ImportError:
+    from pydantic import field_validator as validator  # Pydantic v2 style
 from enum import Enum
 
 

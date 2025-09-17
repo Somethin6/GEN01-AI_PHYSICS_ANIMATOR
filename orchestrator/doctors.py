@@ -6,7 +6,8 @@ Ensures data quality and consistency between stages.
 import ast
 import re
 import importlib.util
-from typing import List, Dict, Any, Set
+import toml
+from typing import List, Dict, Any, Set, Optional
 from pathlib import Path
 
 from orchestrator.schemas import (
@@ -14,7 +15,12 @@ from orchestrator.schemas import (
     DerivationSchema, VideoOutlineSchema, AnimationCodegenSchema,
     ValidationResult
 )
-from orchestrator.rag import ManimKnowledgeBase
+
+# Try to import real knowledge base, fall back to mock
+try:
+    from orchestrator.rag import ManimKnowledgeBase
+except ImportError:
+    from orchestrator.mock_rag import MockManimKnowledgeBase as ManimKnowledgeBase
 
 
 class ConceptDoctor:
@@ -218,6 +224,203 @@ class VideoOutlineDoctor:
             warnings=warnings,
             suggestions=suggestions
         )
+
+
+class VisualDoctor:
+    """Enhanced visual validation with deterministic checks (no vision models)"""
+    
+    def __init__(self, config_path: str = "orchestrator/config.toml"):
+        self.config = toml.load(config_path)["critic"]
+        self.contrast_min = self.config["contrast_ratio_min"] 
+        self.contrast_large_text = self.config["contrast_ratio_large_text"]
+        self.overlap_threshold = self.config["overlap_threshold"]
+        
+    def validate_visual_properties(self, codegen: AnimationCodegenSchema) -> ValidationResult:
+        """Validate visual properties using deterministic checks"""
+        errors = []
+        warnings = []
+        suggestions = []
+        
+        for i, scene in enumerate(codegen.scenes):
+            scene_errors = []
+            
+            # Extract visual elements from code
+            visual_elements = self._extract_visual_elements(scene.code)
+            
+            # Check z-index ordering
+            z_issues = self._check_z_index_ordering(visual_elements)
+            scene_errors.extend(z_issues)
+            
+            # Check for object collisions/overlaps
+            collision_issues = self._check_object_collisions(visual_elements)
+            scene_errors.extend(collision_issues)
+            
+            # Check contrast ratios
+            contrast_issues = self._check_contrast_ratios(visual_elements)
+            scene_errors.extend(contrast_issues)
+            
+            # Check text readability
+            readability_issues = self._check_text_readability(visual_elements)
+            scene_errors.extend(readability_issues)
+            
+            # Add scene prefix to errors
+            errors.extend([f"Scene {i+1}: {err}" for err in scene_errors])
+        
+        return ValidationResult(
+            valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings,
+            suggestions=suggestions
+        )
+    
+    def _extract_visual_elements(self, code: str) -> List[Dict[str, Any]]:
+        """Extract visual elements from Manim scene code"""
+        elements = []
+        lines = code.split('\n')
+        
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            
+            # Look for object creation patterns
+            if any(cls in line for cls in ['Text(', 'MathTex(', 'Circle(', 'Rectangle(', 'VGroup(']):
+                element = {
+                    'line_number': line_num,
+                    'code': line,
+                    'type': self._extract_object_type(line),
+                    'position': self._extract_position(line),
+                    'color': self._extract_color(line),
+                    'scale': self._extract_scale(line),
+                    'z_index': self._extract_z_index(line),
+                }
+                elements.append(element)
+        
+        return elements
+    
+    def _extract_object_type(self, line: str) -> str:
+        """Extract object type from code line"""
+        for obj_type in ['Text', 'MathTex', 'Circle', 'Rectangle', 'VGroup', 'Axes']:
+            if f'{obj_type}(' in line:
+                return obj_type
+        return 'Unknown'
+    
+    def _extract_position(self, line: str) -> Optional[str]:
+        """Extract position from code line"""
+        import re
+        # Look for position methods
+        pos_methods = ['to_edge', 'next_to', 'move_to', 'shift']
+        for method in pos_methods:
+            if method in line:
+                return method
+        return None
+    
+    def _extract_color(self, line: str) -> Optional[str]:
+        """Extract color from code line"""
+        import re
+        color_match = re.search(r'color=([A-Z_]+|"[^"]*")', line)
+        if color_match:
+            return color_match.group(1)
+        return None
+    
+    def _extract_scale(self, line: str) -> float:
+        """Extract scale from code line"""
+        import re
+        scale_match = re.search(r'\.scale\(([0-9.]+)\)', line)
+        if scale_match:
+            return float(scale_match.group(1))
+        return 1.0
+    
+    def _extract_z_index(self, line: str) -> Optional[int]:
+        """Extract z_index from code line"""
+        import re
+        z_match = re.search(r'z_index=([0-9-]+)', line)
+        if z_match:
+            return int(z_match.group(1))
+        return None
+    
+    def _check_z_index_ordering(self, elements: List[Dict[str, Any]]) -> List[str]:
+        """Check for z-index conflicts and suggest fixes"""
+        errors = []
+        
+        # Group elements by z_index
+        z_groups = {}
+        for elem in elements:
+            z_idx = elem.get('z_index')
+            if z_idx is not None:
+                if z_idx not in z_groups:
+                    z_groups[z_idx] = []
+                z_groups[z_idx].append(elem)
+        
+        # Check for overlapping z-indices with different object types
+        for z_idx, group in z_groups.items():
+            if len(group) > 1:
+                types = [elem['type'] for elem in group]
+                if len(set(types)) > 1:
+                    errors.append(f"Z-index {z_idx} has multiple object types: {types}")
+        
+        return errors
+    
+    def _check_object_collisions(self, elements: List[Dict[str, Any]]) -> List[str]:
+        """Check for object overlaps using heuristics"""
+        errors = []
+        
+        # Group objects by position hints
+        positioned_objects = [elem for elem in elements if elem['position']]
+        
+        # Simple heuristic: objects with same position method might overlap
+        position_groups = {}
+        for elem in positioned_objects:
+            pos = elem['position']
+            if pos not in position_groups:
+                position_groups[pos] = []
+            position_groups[pos].append(elem)
+        
+        for pos, group in position_groups.items():
+            if len(group) > 2 and pos in ['CENTER', 'ORIGIN']:
+                errors.append(f"Multiple objects at {pos} may overlap: {[e['type'] for e in group]}")
+        
+        return errors
+    
+    def _check_contrast_ratios(self, elements: List[Dict[str, Any]]) -> List[str]:
+        """Check color contrast ratios (simplified heuristic)"""
+        errors = []
+        
+        # Define problematic color combinations (simple heuristic)
+        low_contrast_pairs = [
+            ('WHITE', 'YELLOW'),
+            ('BLACK', 'BLUE'), 
+            ('RED', 'GREEN'),  # for colorblind accessibility
+        ]
+        
+        # Check text elements specifically
+        text_elements = [elem for elem in elements if elem['type'] in ['Text', 'MathTex']]
+        
+        for elem in text_elements:
+            color = elem.get('color')
+            if color:
+                # Simple check for known problematic colors
+                if any(color in pair for pair in low_contrast_pairs):
+                    errors.append(f"Text with color {color} may have poor contrast")
+        
+        return errors
+    
+    def _check_text_readability(self, elements: List[Dict[str, Any]]) -> List[str]:
+        """Check text size and readability"""
+        warnings = []
+        
+        text_elements = [elem for elem in elements if elem['type'] in ['Text', 'MathTex']]
+        
+        for elem in text_elements:
+            scale = elem.get('scale', 1.0)
+            
+            # Check for text that might be too small
+            if scale < 0.8:
+                warnings.append(f"Text might be too small (scale={scale})")
+            
+            # Check for text that might be too large
+            if scale > 3.0:
+                warnings.append(f"Text might be too large (scale={scale})")
+        
+        return warnings
 
 
 class AnimationDoctor:

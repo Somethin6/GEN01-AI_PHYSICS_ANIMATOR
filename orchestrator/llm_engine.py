@@ -25,6 +25,9 @@ class LLMEngine:
         self.config = toml.load(config_path)["llm"]
         self.perf_config = toml.load(config_path)["performance"]
         self.llm: Optional[Llama] = None
+        self.prompt_cache: Dict[str, Any] = {}  # For caching repeated prompts
+        self.total_tokens_generated = 0
+        self.total_generation_time = 0.0
         self._initialize_model()
         
     def _initialize_model(self):
@@ -105,13 +108,26 @@ class LLMEngine:
         user_prompt: str, 
         schema: Type[BaseModel],
         temperature: float = 0.1,
-        max_tokens: int = 2048
+        max_tokens: int = 2048,
+        use_cache: bool = True
     ) -> BaseModel:
         """Generate structured output matching Pydantic schema"""
         
-        # Create JSON schema from Pydantic model
-        json_schema = schema.model_json_schema()
+        # Check cache first
+        cache_key = self._get_cache_key(system_prompt, user_prompt, temperature)
+        if use_cache and cache_key in self.prompt_cache:
+            cached_result = self.prompt_cache[cache_key]
+            try:
+                return schema.model_validate(cached_result)
+            except AttributeError:
+                return schema.parse_obj(cached_result)
         
+        # Fix for different pydantic versions
+        try:
+            json_schema = schema.model_json_schema()
+        except AttributeError:
+            json_schema = schema.schema()  # Pydantic v1
+
         # Add schema instruction to system prompt
         enhanced_system = f"""{system_prompt}
 
@@ -120,6 +136,7 @@ You must respond with valid JSON that matches this exact schema:
 
 Only return the JSON object, no other text."""
 
+        start_time = time.time()
         response = self.llm.create_chat_completion(
             messages=[
                 {"role": "system", "content": enhanced_system},
@@ -132,13 +149,27 @@ Only return the JSON object, no other text."""
                 "schema": json_schema
             }
         )
+        end_time = time.time()
+        
+        # Track performance
+        generation_time = end_time - start_time
+        self._track_generation(max_tokens, generation_time)
         
         content = response["choices"][0]["message"]["content"]
         
         try:
             # Parse JSON and validate with schema
             data = json.loads(content)
-            return schema.model_validate(data)
+            
+            # Cache successful result
+            if use_cache:
+                self.prompt_cache[cache_key] = data
+            
+            # Fix for different pydantic versions  
+            try:
+                return schema.model_validate(data)
+            except AttributeError:
+                return schema.parse_obj(data)  # Pydantic v1
         except (json.JSONDecodeError, ValueError) as e:
             raise ValueError(f"Failed to parse structured response: {e}\nContent: {content}")
     
@@ -167,11 +198,32 @@ Only return the JSON object, no other text."""
         if not self.llm:
             return {}
             
-        # Note: llama-cpp-python exposes performance stats through the context
-        # This is a placeholder for the actual performance API
+        avg_tok_per_sec = 0.0
+        if self.total_generation_time > 0:
+            avg_tok_per_sec = self.total_tokens_generated / self.total_generation_time
+            
         return {
             "model_loaded": True,
             "context_size": self.config["n_ctx"],
             "batch_size": self.config["n_batch"],
             "gpu_layers": self.config["n_gpu_layers"],
+            "total_tokens_generated": self.total_tokens_generated,
+            "total_generation_time": self.total_generation_time,
+            "average_tokens_per_second": avg_tok_per_sec,
+            "cache_size": len(self.prompt_cache),
         }
+        
+    def clear_cache(self):
+        """Clear the prompt cache"""
+        self.prompt_cache.clear()
+        
+    def _get_cache_key(self, system_prompt: str, user_prompt: str, temperature: float) -> str:
+        """Generate cache key for prompt caching"""
+        import hashlib
+        content = f"{system_prompt}|{user_prompt}|{temperature}"
+        return hashlib.md5(content.encode()).hexdigest()
+        
+    def _track_generation(self, tokens: int, duration: float):
+        """Track token generation statistics"""
+        self.total_tokens_generated += tokens
+        self.total_generation_time += duration

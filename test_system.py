@@ -96,7 +96,11 @@ def test_schemas():
             "sources": ["Halliday & Resnick Physics"]
         }
         
-        concept = ConceptSchema.model_validate(concept_data)
+        # Test with appropriate Pydantic method based on version
+        try:
+            concept = ConceptSchema.model_validate(concept_data)  # Pydantic v2
+        except AttributeError:
+            concept = ConceptSchema.parse_obj(concept_data)  # Pydantic v1
         print("✓ ConceptSchema validation works")
         
         # Test validation result
