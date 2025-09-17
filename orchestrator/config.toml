@@ -1,20 +1,32 @@
 # AI Physics Animator Configuration
 [llm]
-model_path = "models/Qwen3-14B-Instruct-Q5_K_M.gguf"
+model_path = "models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf"
+draft_model_path = ""  # Optional: path to draft model for speculative decoding
 n_gpu_layers = -1  # offload all layers that fit
-n_ctx = 4096
-n_batch = 1024
-n_ubatch = 512
-offload_kqv = true
-flash_attn = true
+n_ctx = 8192  # Start with 8k context as recommended
+n_batch = 1024  # Prompt prefill batch - try 512-2048
+n_ubatch = 256  # Decode microbatch - try 128-384
+n_threads = 12  # Try physical cores first; then 12-16
+offload_kqv = true  # Keep kv matmuls on GPU
+flash_attn = true  # Much faster attention on GPU
 type_k = "Q8_0"  # KV cache quantization
 type_v = "Q8_0"
 chat_format = "auto"  # will read from GGUF
 verbose = false
+# Speculative decoding settings
+enable_speculative_decoding = true
+speculative_tokens = 2  # num_pred_tokens for prompt lookup
+draft_gpu_layers = -1
+# RoPE settings (leave 0.0 to use GGUF defaults)
+rope_freq_base = 0.0
+rope_freq_scale = 0.0
+numa = false  # your platform likely doesn't need this
+seed = 42  # Deterministic by default
+top_p = 0.9
 
 [performance]
-target_tokens_per_second = 30
-vram_headroom_gb = 1.0
+target_tokens_per_second = 30  # Realistic target for 2080 Ti
+vram_headroom_gb = 1.0  # Leave 1-2GB free for workspace + KV growth
 benchmark_tokens = 512
 
 [manim]
@@ -33,17 +45,22 @@ min_similarity = 0.7
 
 [critic]
 overlap_threshold = 0.2
-contrast_ratio_min = 4.5  # WCAG 2.1
+contrast_ratio_min = 4.5  # WCAG 2.1 AA compliance
 contrast_ratio_large_text = 3.0
 sample_points = [0.0, 0.5, 1.0]
 
 [ffmpeg]
 concat_method = "demuxer"
-output_codec = "h264_nvenc"
-preset = "p5"
+output_codec = "h264_nvenc"  # Use NVENC for RTX 2080 Ti
+preset = "p4"  # P4-P5 for speed/quality balance on 2080 Ti
 crf = 18
 pixel_format = "yuv420p"
 enable_faststart = true
+# Audio normalization with loudnorm (EBU R128)
+audio_normalize = true
+loudnorm_i = -16  # Integrated loudness target
+loudnorm_tp = -1.5  # True peak limit
+loudnorm_lra = 11  # Loudness range
 
 [orchestrator]
 max_retries = 3
